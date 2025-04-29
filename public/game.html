@@ -13,15 +13,19 @@ let players = {};
 let trash = [];
 let trashImages = [];
 let particles = [];
+let fish = [];
 let totalTrash = 50;
 let netImage;
+let backgroundImg;
 let oceanSaved = false;
 let savedTimer = 0;
 let showScoreboard = false;
 let countdown = 30;
+let sunlightAlpha = 0;
 
 function preload() {
   netImage = loadImage('net.png');
+  backgroundImg = loadImage('background.png'); // 👈 your image here
   for (let i = 1; i <= 6; i++) {
     trashImages.push(loadImage(`trash${i}.png`));
   }
@@ -30,8 +34,8 @@ function preload() {
 function setup() {
   createCanvas(3840, 2160);
   socket = io();
-
   spawnTrash();
+  generateFish();
 
   socket.on('playerJoined', ({ id, name }) => {
     players[id] = {
@@ -41,7 +45,7 @@ function setup() {
       x: width / 2,
       y: height / 2,
       targetX: width / 2,
-      targetY: width / 2
+      targetY: height / 2
     };
   });
 
@@ -72,8 +76,38 @@ function spawnTrash() {
   }
 }
 
+function generateFish() {
+  fish = [];
+  for (let i = 0; i < 20; i++) {
+    fish.push({
+      x: random(width),
+      y: random(height),
+      speed: random(0.5, 1.5),
+      size: random(40, 80),
+      color: color(random(100, 255), random(100, 255), random(100, 255))
+    });
+  }
+}
+
 function draw() {
-  background(50, 80, 100, 20);
+  let progress = 1 - (trash.length / totalTrash);
+
+  // Background image
+  if (backgroundImg) {
+    imageMode(CORNER); // 👈 Fixes scaling issue
+    image(backgroundImg, 0, 0, width, height);
+  } else {
+    let murkyColor = color(30, 60, 40);
+    let clearColor = color(0, 180, 255);
+    let bgColor = lerpColor(murkyColor, clearColor, progress);
+    background(bgColor);
+  }
+
+  // Fog layer
+  let fogAmount = map(trash.length, 0, totalTrash, 0, 120);
+  noStroke();
+  fill(0, fogAmount);
+  rect(0, 0, width, height);
 
   if (showScoreboard) {
     drawScoreboard();
@@ -82,10 +116,30 @@ function draw() {
 
   updateParticles();
 
+  // Sunlight rays if ocean mostly clean
+  if (progress > 0.7) {
+    sunlightAlpha = lerp(sunlightAlpha, 100, 0.01);
+    drawSunlightRays(sunlightAlpha);
+  }
+
   imageMode(CENTER);
   for (let t of trash) {
     let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
     image(t.img, t.x, t.y + floatY, t.size, t.size);
+  }
+
+  // Fish return when ocean is clean
+  if (progress >= 1) {
+    for (let f of fish) {
+      fill(f.color);
+      noStroke();
+      ellipse(f.x, f.y, f.size * 1.2, f.size);
+      f.x += f.speed;
+      if (f.x > width + f.size) {
+        f.x = -f.size;
+        f.y = random(height);
+      }
+    }
   }
 
   for (let id in players) {
@@ -112,27 +166,21 @@ function draw() {
       let t = trash[i];
       if (dist(p.x, p.y, t.x, t.y) < (50 + t.size / 2)) {
         trash.splice(i, 1);
-
-        // only send addScore if this is MY controller
-        if (socket.id === id) {
-          socket.emit('addScore');
-        }
+        socket.emit('tryCollectTrash');
       }
     }
   }
 
-  drawProgressBar(1 - (trash.length / totalTrash));
+  drawProgressBar(progress);
 
   if (!oceanSaved && trash.length === 0) {
     oceanSaved = true;
     savedTimer = frameCount;
   }
 
-  if (oceanSaved) {
-    if (frameCount > savedTimer + 60) {
-      showScoreboard = true;
-      savedTimer = frameCount;
-    }
+  if (oceanSaved && frameCount > savedTimer + 60) {
+    showScoreboard = true;
+    savedTimer = frameCount;
   }
 }
 
@@ -199,8 +247,23 @@ function drawScoreboard() {
         players[id].score = 0;
       }
       spawnTrash();
+      generateFish();
     }
   }
+}
+
+function drawSunlightRays(alpha) {
+  push();
+  blendMode(ADD);
+  noStroke();
+  fill(255, 255, 200, alpha);
+  for (let i = 0; i < 8; i++) {
+    let angle = i * TWO_PI / 8;
+    let x = width / 2 + cos(angle) * 800;
+    let y = height / 2 + sin(angle) * 800;
+    triangle(width / 2, 0, x, y, width / 2, height / 2);
+  }
+  pop();
 }
 </script>
 </body>

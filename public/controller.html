@@ -8,23 +8,21 @@
     html, body {
       margin: 0;
       padding: 0;
-      font-family: sans-serif;
       height: 100%;
       width: 100%;
       overflow: hidden;
       touch-action: none;
+      font-family: sans-serif;
       background: url('controller-bg.png') no-repeat center center fixed;
       background-size: cover;
       color: white;
     }
 
     .overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
+      background: rgba(0, 0, 0, 0.4); /* optional dark overlay */
       height: 100%;
-      background: rgba(0, 0, 0, 0.25); /* optional dimming */
+      width: 100%;
+      position: absolute;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -52,7 +50,9 @@
 const bannedWords = ["fuck", "shit", "bitch", "asshole", "cunt", "dick", "nigger", "faggot"];
 let socket;
 let isTouching = false;
-let hasMoved = false;
+let startX = 0, startY = 0;
+let movedEnough = false;
+const moveThreshold = 10;
 
 function joinGame() {
   const input = document.getElementById('nameInput').value.trim();
@@ -67,22 +67,26 @@ function joinGame() {
   socket = io();
   socket.emit('join', { name: cleanName });
 
-  window.addEventListener('touchstart', () => {
+  window.addEventListener('touchstart', (event) => {
     isTouching = true;
-    hasMoved = false;
+    movedEnough = false;
+    const touch = event.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
   });
 
   window.addEventListener('touchmove', (event) => {
     if (!isTouching) return;
     event.preventDefault();
     const touch = event.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
+
+    if (!movedEnough && Math.hypot(dx, dy) < moveThreshold) return;
+
+    movedEnough = true;
     const x = touch.clientX / window.innerWidth;
     const y = touch.clientY / window.innerHeight;
-
-    if (!hasMoved) {
-      hasMoved = true;
-      return;
-    }
 
     socket.emit('playerMove', { x, y });
     socket.emit('tryCollectTrash', { x, y });
@@ -90,7 +94,7 @@ function joinGame() {
 
   window.addEventListener('touchend', () => {
     isTouching = false;
-    hasMoved = false;
+    movedEnough = false;
   });
 
   document.body.innerHTML = `<div class="overlay"><h2>Connected as: ${cleanName}</h2><p>Touch and drag to move</p></div>`;
