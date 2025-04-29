@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ocean Cleanup Game</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+<script>
+let socket;
+let players = {};
+let trash = [];
+let trashImages = [];
+let particles = [];
+let totalTrash = 50;
+let netImage;
+let oceanSaved = false;
+let savedTimer = 0;
+let showScoreboard = false;
+let countdown = 30;
+
+function preload() {
+  netImage = loadImage('net.png');
+  for (let i = 1; i <= 6; i++) {
+    trashImages.push(loadImage(`trash${i}.png`));
+  }
+}
+
+function setup() {
+  createCanvas(3840, 2160);
+  socket = io();
+
+  spawnTrash();
+
+  socket.on('playerJoined', ({ id, name }) => {
+    players[id] = {
+      color: [random(255), random(255), random(255)],
+      name: name,
+      score: 0,
+      x: width / 2,
+      y: height / 2,
+      targetX: width / 2,
+      targetY: width / 2
+    };
+  });
+
+  socket.on('updateGame', ({ id, move }) => {
+    if (players[id]) {
+      players[id].targetX = move.x * width;
+      players[id].targetY = move.y * height;
+    }
+  });
+
+  socket.on('scoreUpdate', ({ id, score }) => {
+    if (players[id]) {
+      players[id].score = score;
+    }
+  });
+}
+
+function spawnTrash() {
+  trash = [];
+  for (let i = 0; i < totalTrash; i++) {
+    trash.push({
+      x: random(width),
+      y: random(height),
+      size: random(40, 60),
+      img: random(trashImages),
+      floatOffset: random(1000)
+    });
+  }
+}
+
+function draw() {
+  background(50, 80, 100, 20);
+
+  if (showScoreboard) {
+    drawScoreboard();
+    return;
+  }
+
+  updateParticles();
+
+  imageMode(CENTER);
+  for (let t of trash) {
+    let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
+    image(t.img, t.x, t.y + floatY, t.size, t.size);
+  }
+
+  for (let id in players) {
+    let p = players[id];
+    p.x = lerp(p.x, p.targetX, 0.1);
+    p.y = lerp(p.y, p.targetY, 0.1);
+
+    if (frameCount % 5 === 0) {
+      particles.push({ x: p.x, y: p.y, life: 60, color: p.color });
+    }
+
+    push();
+    translate(p.x, p.y);
+    imageMode(CENTER);
+    image(netImage, 0, 0, 100, 100);
+    fill(255);
+    noStroke();
+    textAlign(CENTER);
+    textSize(24);
+    text(p.name, 0, -70);
+    pop();
+
+    for (let i = trash.length - 1; i >= 0; i--) {
+      let t = trash[i];
+      if (dist(p.x, p.y, t.x, t.y) < (50 + t.size / 2)) {
+        trash.splice(i, 1);
+
+        // only send addScore if this is MY controller
+        if (socket.id === id) {
+          socket.emit('addScore');
+        }
+      }
+    }
+  }
+
+  drawProgressBar(1 - (trash.length / totalTrash));
+
+  if (!oceanSaved && trash.length === 0) {
+    oceanSaved = true;
+    savedTimer = frameCount;
+  }
+
+  if (oceanSaved) {
+    if (frameCount > savedTimer + 60) {
+      showScoreboard = true;
+      savedTimer = frameCount;
+    }
+  }
+}
+
+function drawProgressBar(progress) {
+  let barWidth = width * 0.8;
+  let barHeight = 30;
+  let x = width / 2 - barWidth / 2;
+  let y = 50;
+
+  noFill();
+  stroke(255);
+  strokeWeight(4);
+  rect(x, y, barWidth, barHeight);
+
+  noStroke();
+  fill(0, 255, 150);
+  rect(x, y, barWidth * progress, barHeight);
+
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text("Ocean Cleanup Progress", width / 2, y + barHeight + 25);
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    let p = particles[i];
+    fill(p.color[0], p.color[1], p.color[2], map(p.life, 0, 60, 0, 255));
+    noStroke();
+    ellipse(p.x, p.y, 10);
+    p.life -= 2;
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function drawScoreboard() {
+  background(0);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(80);
+  text("🌟 Ocean Saved! 🌟", width / 2, 100);
+
+  textSize(40);
+  let sortedPlayers = Object.values(players).sort((a, b) => b.score - a.score);
+  let startY = 250;
+  for (let i = 0; i < sortedPlayers.length; i++) {
+    let p = sortedPlayers[i];
+    text(`${i + 1}. ${p.name} - ${p.score} trash collected`, width / 2, startY + i * 60);
+  }
+
+  textSize(30);
+  text(`Next game starting in ${countdown} seconds...`, width / 2, height - 100);
+
+  if (frameCount % 60 === 0) {
+    countdown--;
+    if (countdown <= 0) {
+      showScoreboard = false;
+      oceanSaved = false;
+      countdown = 30;
+      for (let id in players) {
+        players[id].score = 0;
+      }
+      spawnTrash();
+    }
+  }
+}
+</script>
+</body>
+</html>
