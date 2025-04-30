@@ -15,13 +15,13 @@ io.on('connection', (socket) => {
 
   socket.on('join', (data) => {
     players[socket.id] = {
-      name: data.name,
+      name: data,
       x: 0.5,
       y: 0.5,
       score: 0
     };
-    console.log(`🎮 Player joined: ${data.name}`);
-    io.emit('playerJoined', { id: socket.id, name: data.name });
+    console.log(`🎮 Player joined: ${data}`);
+    io.emit('playerJoined', { id: socket.id, name: data });
   });
 
   socket.on('playerMove', (data) => {
@@ -32,10 +32,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('tryCollectTrash', (data) => {
+  socket.on('tryCollectTrash', () => {
     if (players[socket.id]) {
       players[socket.id].score += 1;
-      console.log(`+1 for ${players[socket.id].name}: ${players[socket.id].score}`);
+      console.log(`✨ +1 for ${players[socket.id].name}: ${players[socket.id].score}`);
       io.emit('scoreUpdate', { id: socket.id, score: players[socket.id].score });
     }
   });

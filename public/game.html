@@ -3,77 +3,57 @@
 <head>
   <meta charset="UTF-8" />
   <title>Ocean Cleanup Game</title>
+  <link rel="icon" href="data:,">
   <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/addons/p5.sound.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+  <style>
+    #startOverlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 48px;
+      font-family: sans-serif;
+      z-index: 1000;
+    }
+    #startOverlay.hidden {
+      display: none;
+    }
+        #resToggle:hover {
+      opacity: 1;
+    }
+  </style>
 </head>
 <body>
+<div id="startOverlay" onclick="handleStartClick()">Click to Start</div>
 <script>
-let socket;
-let players = {};
-let trash = [];
-let trashImages = [];
-let particles = [];
-let bubbles = [];
-let fish = [];
-let totalTrash = 50;
-let netImage;
-let backgroundImg;
-let oceanSaved = false;
-let savedTimer = 0;
-let showScoreboard = false;
-let countdown = 30;
-let splash = true;
-let shimmerX = 0;
-
-function preload() {
-  netImage = loadImage('net.png');
-  backgroundImg = loadImage('background.png');
-  for (let i = 1; i <= 6; i++) {
-    trashImages.push(loadImage(`trash${i}.png`));
-  }
+function handleStartClick() {
+  const overlay = document.getElementById('startOverlay');
+  overlay.classList.add('hidden');
 }
 
-function setup() {
-  createCanvas(3840, 2160);
-  socket = io();
-  spawnTrash();
-  generateFish();
-
-  socket.on('playerJoined', ({ id, name }) => {
-    players[id] = {
-      color: [random(255), random(255), random(255)],
-      name: name,
-      score: 0,
-      x: width / 2,
-      y: height / 2,
-      targetX: width / 2,
-      targetY: height / 2,
-      alpha: 0
-    };
-    splash = false;
-  });
-
-  socket.on('updateGame', ({ id, move }) => {
-    if (players[id]) {
-      players[id].targetX = move.x * width;
-      players[id].targetY = move.y * height;
-    }
-  });
-
-  socket.on('scoreUpdate', ({ id, score }) => {
-    if (players[id]) {
-      players[id].score = score;
-    }
-  });
-}
-
+</script>
+<script>
 function spawnTrash() {
   trash = [];
   const marginBottom = 200;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = height / 2 - 100;
   for (let i = 0; i < totalTrash; i++) {
+    let angle = random(TWO_PI);
+    let r = random(radius);
+    let x = centerX + cos(angle) * r;
+    let y = centerY + sin(angle) * r;
     trash.push({
-      x: random(width),
-      y: random(height - marginBottom),
+      x: x,
+      y: y,
       size: random(40, 60),
       img: random(trashImages),
       floatOffset: random(1000)
@@ -83,121 +63,22 @@ function spawnTrash() {
 
 function generateFish() {
   fish = [];
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = height / 2 - 100;
   for (let i = 0; i < 20; i++) {
+    let angle = random(TWO_PI);
+    let r = random(radius);
+    let x = centerX + cos(angle) * r;
+    let y = centerY + sin(angle) * r;
     fish.push({
-      x: random(width),
-      y: random(height),
+      x: x,
+      y: y,
       speed: random(0.5, 1.5),
       size: random(40, 80),
       color: color(random(100, 255), random(100, 255), random(100, 255))
     });
   }
-}
-
-function draw() {
-  let progress = 1 - (trash.length / totalTrash);
-
-  // --- BACKGROUND ---
-  if (backgroundImg) {
-    imageMode(CORNER);
-    image(backgroundImg, 0, 0, width, height);
-  } else {
-    background(30, 60, 40);
-  }
-
-  // --- FOG LAYER ---
-  let fogAmount = map(trash.length, 0, totalTrash, 0, 120);
-  noStroke();
-  fill(0, fogAmount);
-  rect(0, 0, width, height);
-
-  // --- PARTICLES + BUBBLES ---
-  updateBubbles();
-  updateParticles();
-
-  // --- FISH LOOP ---
-  for (let f of fish) {
-    fill(f.color);
-    noStroke();
-    ellipse(f.x, f.y, f.size * 1.2, f.size);
-    f.x += f.speed;
-    if (f.x > width + f.size) {
-      f.x = -f.size;
-      f.y = random(height);
-    }
-  }
-
-  // --- TRASH DRAWING ---
-  imageMode(CENTER);
-  for (let t of trash) {
-    let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
-    let glowSize = t.size + 20;
-    fill(0, 255, 200, 60);
-    ellipse(t.x, t.y + floatY, glowSize);
-    image(t.img, t.x, t.y + floatY, t.size, t.size);
-  }
-
-  // --- PLAYER DRAWING ---
-  for (let id in players) {
-    let p = players[id];
-    p.x = lerp(p.x, p.targetX, 0.1);
-    p.y = lerp(p.y, p.targetY, 0.1);
-    if (p.alpha < 255) p.alpha += 5;
-
-    if (frameCount % 6 === 0) {
-      bubbles.push({
-        x: p.x + random(-10, 10),
-        y: p.y + 30,
-        size: random(10, 20),
-        life: 60,
-        color: [200, 255, 255]
-      });
-    }
-
-    if (frameCount % 5 === 0) {
-      particles.push({ x: p.x, y: p.y, life: 60, color: p.color });
-    }
-
-    push();
-    translate(p.x, p.y);
-    tint(255, p.alpha);
-    image(netImage, 0, 0, 100, 100);
-    noTint();
-    fill(255, p.alpha);
-    noStroke();
-    textAlign(CENTER);
-    textSize(24);
-    text(p.name, 0, -70);
-    pop();
-
-    for (let i = trash.length - 1; i >= 0; i--) {
-      let t = trash[i];
-      if (dist(p.x, p.y, t.x, t.y) < (50 + t.size / 2)) {
-        trash.splice(i, 1);
-        socket.emit('tryCollectTrash');
-      }
-    }
-  }
-
-  // --- PROGRESS BAR ---
-  drawProgressBar(progress);
-
-  // --- SPLASH SCREEN ---
-  if (splash) drawSplashScreen();
-
-  // --- SCOREBOARD LOGIC ---
-  if (!oceanSaved && trash.length === 0) {
-    oceanSaved = true;
-    savedTimer = frameCount;
-  }
-
-  if (oceanSaved && frameCount > savedTimer + 60) {
-    showScoreboard = true;
-    savedTimer = frameCount;
-  }
-
-  // --- SCOREBOARD ---
-  if (showScoreboard) drawScoreboard();
 }
 
 function updateBubbles() {
@@ -229,67 +110,69 @@ function updateParticles() {
 }
 
 function drawProgressBar(progress) {
-  const barWidth = width * 0.8;
-  const barHeight = 40;
-  const x = width / 2 - barWidth / 2;
-  const y = height - 100;
+  const radius = height / 2 - 100;
+  const barRadius = radius - 80;
+  const cx = width / 2;
+  const cy = height / 2;
+  const angleStart = radians(200);
+  const angleEnd = radians(340);
+  const angleRange = angleEnd - angleStart;
+  const barWidth = angleRange * barRadius;
 
-  shimmerX += 10;
-  if (shimmerX > barWidth) shimmerX = -200;
+  shimmerX += 6;
+  if (shimmerX > barWidth) shimmerX = -100;
 
-  noFill();
-  stroke(0, 255, 200, 100);
-  strokeWeight(6);
-  rect(x - 4, y - 4, barWidth + 8, barHeight + 8, 30);
+  for (let i = 0; i < 2; i++) {
+    let flip = i === 1 ? PI : 0;
+    noFill();
+    stroke(0, 255, 200, 100);
+    strokeWeight(20);
+    arc(cx, cy, barRadius * 2, barRadius * 2, angleStart + flip, angleEnd + flip);
 
-  noStroke();
-  fill(0, 50, 70, 180);
-  rect(x, y, barWidth, barHeight, 20);
+    stroke(lerpColor(color(255, 50, 100), color(0, 255, 150), progress));
+    strokeWeight(20);
+    arc(cx, cy, barRadius * 2, barRadius * 2, angleStart + flip, angleStart + flip + angleRange * progress);
 
-  let fillColor = lerpColor(color(255, 50, 100), color(0, 255, 150), progress);
-  fill(fillColor);
-  rect(x, y, barWidth * progress, barHeight, 20);
-
-  fill(255, 255, 255, 80);
-  rect(x + shimmerX, y, 100, barHeight, 20);
+    noStroke();
+    fill(255, 255, 255, 80);
+    let shimmerAngle = angleStart + shimmerX / barWidth * angleRange + flip;
+    let sx = cx + cos(shimmerAngle) * barRadius;
+    let sy = cy + sin(shimmerAngle) * barRadius;
+    ellipse(sx, sy, 28);
+  }
 
   fill(255);
   noStroke();
-  textSize(32);
-  textAlign(CENTER, BOTTOM);
-  text(`Ocean Cleanup: ${Math.floor(progress * 100)}%`, width / 2, y - 10);
-}
-
-function drawSplashScreen() {
-  fill(0, 180);
-  rect(0, 0, width, height);
-  fill(255);
+  textSize(28);
   textAlign(CENTER, CENTER);
-  textSize(80);
-  text("🌊 OCEAN CLEANUP 🌊", width / 2, height / 2 - 100);
-  textSize(40);
-  text("Waiting for players to join...", width / 2, height / 2 + 20);
+  text(`Ocean Cleanup: ${Math.floor(progress * 100)}%`, cx, cy + barRadius + 50);
+  push();
+  translate(cx, cy - barRadius - 50);
+  rotate(PI);
+  text(`Ocean Cleanup: ${Math.floor(progress * 100)}%`, 0, 0);
+  pop();
 }
 
 function drawScoreboard() {
+  noFill();
+  stroke(255, 40);
+  strokeWeight(4);
+  ellipse(width / 2, height / 2, height - 40);
   fill(0, 200);
   rect(0, 0, width, height);
   fill(255);
   textAlign(CENTER, CENTER);
   textSize(80);
   text("🌟 Ocean Saved! 🌟", width / 2, 100);
-
   textSize(40);
   let sortedPlayers = Object.values(players).sort((a, b) => b.score - a.score);
-  let startY = 250;
+  let startY = height / 2 - (sortedPlayers.length * 30);
   for (let i = 0; i < sortedPlayers.length; i++) {
     let p = sortedPlayers[i];
     text(`${i + 1}. ${p.name} - ${p.score} trash collected`, width / 2, startY + i * 60);
   }
-
   textSize(30);
-  text(`Next game starting in ${countdown} seconds...`, width / 2, height - 100);
-
+  text(`Next game starting in ${countdown} seconds...`, width / 2, height / 2 + (sortedPlayers.length * 30) + 60);
   if (frameCount % 60 === 0) {
     countdown--;
     if (countdown <= 0) {
@@ -304,6 +187,210 @@ function drawScoreboard() {
       generateFish();
       splash = true;
     }
+  }
+}
+
+// ✅ Full game code inlined here
+let socket;
+let players = {};
+let trash = [];
+let trashImages = [];
+let particles = [];
+let bubbles = [];
+let fish = [];
+let totalTrash = 50;
+let netImage;
+let backgroundImg;
+let oceanSaved = false;
+let savedTimer = 0;
+let showScoreboard = false;
+let countdown = 30;
+let splash = true;
+let shimmerX = 0;
+let bgMusic;
+let gameTimer = 120;
+let gameStartFrame;
+
+function preload() {
+  netImage = loadImage('net.png');
+  backgroundImg = loadImage('background.png');
+  for (let i = 1; i <= 10; i++) {
+    trashImages.push(loadImage(`trash${i}.png`));
+  }
+  soundFormats('mp3');
+  bgMusic = loadSound('background-music.mp3');
+}
+
+function setup() {
+  createCanvas(4096, 4096);
+  socket = io();
+  spawnTrash();
+  generateFish();
+
+  socket.on('playerJoined', ({ id, name }) => {
+    players[id] = {
+      color: [random(255), random(255), random(255)],
+      name: name,
+      score: 0,
+      x: width / 2,
+      y: height / 2,
+      targetX: width / 2,
+      targetY: height / 2,
+      alpha: 0
+    };
+    splash = false;
+    if (bgMusic && !bgMusic.isPlaying()) {
+      bgMusic.setVolume(0.4);
+      bgMusic.loop();
+    }
+  });
+
+  socket.on('updateGame', ({ id, move }) => {
+    if (players[id]) {
+      players[id].targetX = move.x * width;
+      players[id].targetY = move.y * height;
+    }
+  });
+
+  socket.on('scoreUpdate', ({ id, score }) => {
+    if (players[id]) {
+      players[id].score = score;
+    }
+  });
+}
+
+function draw() {
+  if (!gameStartFrame) gameStartFrame = frameCount;
+  let timeElapsed = Math.floor((frameCount - gameStartFrame) / 60);
+  let timeLeft = max(0, gameTimer - timeElapsed);
+
+  clear();
+  push();
+  drawingContext.save();
+  drawingContext.beginPath();
+  drawingContext.arc(width / 2, height / 2, height / 2, 0, TWO_PI);
+  drawingContext.clip();
+
+  let progress = 1 - (trash.length / totalTrash);
+
+  if (backgroundImg) {
+    imageMode(CORNER);
+    image(backgroundImg, 0, 0, width, height);
+  } else {
+    background(0, 100, 200);
+  }
+
+  let fogAmount = map(trash.length, 0, totalTrash, 60, 160);
+  noStroke();
+  fill(0, fogAmount);
+  rect(0, 0, width, height);
+
+  updateBubbles();
+  updateParticles();
+
+  for (let f of fish) {
+    fill(f.color);
+    noStroke();
+    ellipse(f.x, f.y, f.size * 1.2, f.size);
+    f.x += f.speed;
+    let centerX = width / 2;
+    let centerY = height / 2;
+    let radius = height / 2 - 100;
+    let distFromCenter = dist(f.x, f.y, centerX, centerY);
+    if (distFromCenter > radius) {
+      let angle = random(TWO_PI);
+      let r = random(radius);
+      f.x = centerX + cos(angle) * r;
+      f.y = centerY + sin(angle) * r;
+    }
+  }
+
+  imageMode(CENTER);
+  for (let t of trash) {
+    let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
+    let glowSize = t.size + 20;
+    fill(0, 255, 200, 60);
+    ellipse(t.x, t.y + floatY, glowSize);
+    fill(255, 255, 255, 60);
+    ellipse(t.x, t.y + floatY, glowSize + 10);
+    image(t.img, t.x, t.y + floatY, t.size, t.size);
+  }
+
+  for (let id in players) {
+    let p = players[id];
+    let centerX = width / 2;
+    let centerY = height / 2;
+    let radius = height / 2 - 150;
+    let targetDist = dist(p.targetX, p.targetY, centerX, centerY);
+    if (targetDist > radius) {
+      let angle = atan2(p.targetY - centerY, p.targetX - centerX);
+      p.targetX = centerX + cos(angle) * radius;
+      p.targetY = centerY + sin(angle) * radius;
+    }
+    p.x = lerp(p.x, p.targetX, 0.1);
+    p.y = lerp(p.y, p.targetY, 0.1);
+    if (p.alpha < 255) p.alpha += 5;
+
+    if (frameCount % 6 === 0) {
+      bubbles.push({ x: p.x + random(-10, 10), y: p.y + 30, size: random(10, 20), life: 60, color: [200, 255, 255] });
+    }
+    if (frameCount % 5 === 0) {
+      particles.push({ x: p.x, y: p.y, life: 60, color: p.color });
+    }
+
+    push();
+    translate(p.x, p.y);
+    tint(255, p.alpha);
+    image(netImage, 0, 0, 100, 100);
+    noTint();
+    fill(255, p.alpha);
+    noStroke();
+    textAlign(CENTER);
+    textSize(24);
+    text(p.name, 0, -70);
+    pop();
+
+    for (let i = trash.length - 1; i >= 0; i--) {
+      let t = trash[i];
+      if (dist(p.x, p.y, t.x, t.y) < (50 + t.size / 2)) {
+        trash.splice(i, 1);
+        socket.emit('tryCollectTrash');
+      }
+    }
+  }
+
+  drawProgressBar(progress);
+
+  let timerRadius = 260;
+  let centerX = width / 2;
+  let centerY = height / 2 + (height / 2 - 280);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(100);
+  text(`${timeLeft}`, centerX, centerY);
+  push();
+  translate(centerX, height - centerY);
+  rotate(PI);
+  text(`${timeLeft}`, 0, 0);
+  pop();
+
+  if (!oceanSaved && trash.length === 0) {
+    oceanSaved = true;
+    savedTimer = frameCount;
+  }
+
+  if (oceanSaved && frameCount > savedTimer + 60) {
+    showScoreboard = true;
+    savedTimer = frameCount;
+  }
+
+  if (showScoreboard) drawScoreboard();
+  drawingContext.restore();
+  pop();
+
+  if (timeLeft === 0 && !showScoreboard) {
+    oceanSaved = true;
+    showScoreboard = true;
   }
 }
 </script>

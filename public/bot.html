@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Bot Simulator</title>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+<h3>Bot Controller</h3>
+<button onclick="startBots()">Spawn 90 Bots</button>
+<script>
+let bots = [];
+
+function startBots() {
+  const numBots = 90;
+  for (let i = 0; i < numBots; i++) {
+    const socket = io();
+    const name = "Bot" + (i + 1);
+    socket.emit("join", name);
+
+    setInterval(() => {
+      const move = {
+        x: Math.random(),
+        y: Math.random()
+      };
+      socket.emit("playerMove", move);
+    }, 300 + Math.random() * 700); // each bot moves on its own interval
+
+    socket.on("scoreUpdate", () => {}); // suppress log
+    bots.push(socket);
+  }
+  console.log("✅ 90 bots started");
+}
+</script>
+</body>
+</html>

@@ -2,103 +2,105 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Ocean Controller</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controller</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <script src="/socket.io/socket.io.js"></script>
   <style>
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      touch-action: none;
-      font-family: sans-serif;
-      background: url('controller-bg.png') no-repeat center center fixed;
+      background: url('controller-bg.png') center center no-repeat;
       background-size: cover;
-      color: white;
-    }
-
-    .overlay {
-      background: rgba(0, 0, 0, 0.4); /* optional dark overlay */
       height: 100%;
-      width: 100%;
-      position: absolute;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
+      overflow: hidden;
+      font-family: sans-serif;
+      touch-action: none;
     }
-
-    input, button {
-      font-size: 24px;
-      padding: 10px;
-      margin-top: 20px;
+    #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      z-index: 10;
+    }
+    #overlay input {
+      font-size: 1.5em;
+      padding: 0.5em;
+      margin-top: 1em;
+      border-radius: 10px;
+      border: none;
+    }
+    #overlay button {
+      font-size: 1.2em;
+      margin-top: 1em;
+      padding: 0.5em 1em;
+      border: none;
+      background: #0cf;
+      color: white;
+      border-radius: 10px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-<div class="overlay">
-  <h1>Enter Your Name</h1>
-  <input type="text" id="nameInput" placeholder="Your Name">
-  <br><br>
-  <button onclick="joinGame()">Join</button>
+
+<div id="overlay">
+  <h2>Enter your name</h2>
+  <input type="text" id="playerName" maxlength="12" placeholder="Name">
+  <button onclick="startController()">Join</button>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
 <script>
-const bannedWords = ["fuck", "shit", "bitch", "asshole", "cunt", "dick", "nigger", "faggot"];
 let socket;
-let isTouching = false;
 let startX = 0, startY = 0;
-let movedEnough = false;
-const moveThreshold = 10;
+let posX = 0.5, posY = 0.5;
 
-function joinGame() {
-  const input = document.getElementById('nameInput').value.trim();
-  let cleanName = input || "Sailor" + Math.floor(Math.random() * 1000);
+function startController() {
+  const name = document.getElementById("playerName").value.trim();
+  if (!name || name.length < 1) return;
 
-  for (let word of bannedWords) {
-    if (cleanName.toLowerCase().includes(word)) {
-      cleanName = "Sailor" + Math.floor(Math.random() * 1000);
-    }
-  }
+  document.getElementById("overlay").style.display = "none";
 
   socket = io();
-  socket.emit('join', { name: cleanName });
+  socket.emit('join', name);
 
-  window.addEventListener('touchstart', (event) => {
-    isTouching = true;
-    movedEnough = false;
-    const touch = event.touches[0];
-    startX = touch.clientX;
-    startY = touch.clientY;
-  });
-
-  window.addEventListener('touchmove', (event) => {
-    if (!isTouching) return;
-    event.preventDefault();
-    const touch = event.touches[0];
-    const dx = touch.clientX - startX;
-    const dy = touch.clientY - startY;
-
-    if (!movedEnough && Math.hypot(dx, dy) < moveThreshold) return;
-
-    movedEnough = true;
-    const x = touch.clientX / window.innerWidth;
-    const y = touch.clientY / window.innerHeight;
-
-    socket.emit('playerMove', { x, y });
-    socket.emit('tryCollectTrash', { x, y });
+  // Prevent iOS from swiping to refresh or navigating
+  document.body.addEventListener('touchmove', function(e) {
+    e.preventDefault();
   }, { passive: false });
 
-  window.addEventListener('touchend', () => {
-    isTouching = false;
-    movedEnough = false;
+  document.body.addEventListener("touchstart", (e) => {
+    if (e.touches.length > 0) {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+    }
   });
 
-  document.body.innerHTML = `<div class="overlay"><h2>Connected as: ${cleanName}</h2><p>Touch and drag to move</p></div>`;
+  document.body.addEventListener("touchmove", (e) => {
+    if (e.touches.length > 0) {
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      startX = t.clientX;
+      startY = t.clientY;
+
+      posX += dx / window.innerWidth;
+      posY += dy / window.innerHeight;
+      posX = Math.max(0, Math.min(1, posX));
+      posY = Math.max(0, Math.min(1, posY));
+
+      socket.emit('playerMove', { x: posX, y: posY });
+    }
+  });
 }
 </script>
+
 </body>
 </html>
