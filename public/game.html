@@ -25,7 +25,7 @@ let sunlightAlpha = 0;
 
 function preload() {
   netImage = loadImage('net.png');
-  backgroundImg = loadImage('background.png'); // 👈 your image here
+  backgroundImg = loadImage('background.png');
   for (let i = 1; i <= 6; i++) {
     trashImages.push(loadImage(`trash${i}.png`));
   }
@@ -92,9 +92,9 @@ function generateFish() {
 function draw() {
   let progress = 1 - (trash.length / totalTrash);
 
-  // Background image
+  // Background
   if (backgroundImg) {
-    imageMode(CORNER); // 👈 Fixes scaling issue
+    imageMode(CORNER);
     image(backgroundImg, 0, 0, width, height);
   } else {
     let murkyColor = color(30, 60, 40);
@@ -116,7 +116,7 @@ function draw() {
 
   updateParticles();
 
-  // Sunlight rays if ocean mostly clean
+  // Sunlight rays
   if (progress > 0.7) {
     sunlightAlpha = lerp(sunlightAlpha, 100, 0.01);
     drawSunlightRays(sunlightAlpha);
@@ -128,7 +128,6 @@ function draw() {
     image(t.img, t.x, t.y + floatY, t.size, t.size);
   }
 
-  // Fish return when ocean is clean
   if (progress >= 1) {
     for (let f of fish) {
       fill(f.color);
@@ -153,7 +152,6 @@ function draw() {
 
     push();
     translate(p.x, p.y);
-    imageMode(CENTER);
     image(netImage, 0, 0, 100, 100);
     fill(255);
     noStroke();
@@ -184,28 +182,6 @@ function draw() {
   }
 }
 
-function drawProgressBar(progress) {
-  let barWidth = width * 0.8;
-  let barHeight = 30;
-  let x = width / 2 - barWidth / 2;
-  let y = 50;
-
-  noFill();
-  stroke(255);
-  strokeWeight(4);
-  rect(x, y, barWidth, barHeight);
-
-  noStroke();
-  fill(0, 255, 150);
-  rect(x, y, barWidth * progress, barHeight);
-
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(24);
-  text("Ocean Cleanup Progress", width / 2, y + barHeight + 25);
-}
-
 function updateParticles() {
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
@@ -217,6 +193,40 @@ function updateParticles() {
       particles.splice(i, 1);
     }
   }
+}
+
+function drawProgressBar(progress) {
+  const barWidth = width * 0.8;
+  const barHeight = 40;
+  const x = width / 2 - barWidth / 2;
+  const y = height - 100;
+
+  // Outer border glow
+  noFill();
+  stroke(0, 255, 200, 100);
+  strokeWeight(6);
+  rect(x - 4, y - 4, barWidth + 8, barHeight + 8, 30);
+
+  // Background bar
+  noStroke();
+  fill(0, 50, 70, 180);
+  rect(x, y, barWidth, barHeight, 20);
+
+  // Progress fill
+  let fillColor = lerpColor(color(255, 50, 100), color(0, 255, 150), progress);
+  fill(fillColor);
+  rect(x, y, barWidth * progress, barHeight, 20);
+
+  // Shine effect
+  fill(255, 255, 255, 50);
+  rect(x, y, barWidth * progress, barHeight * 0.2, 20);
+
+  // Label
+  fill(255);
+  noStroke();
+  textSize(32);
+  textAlign(CENTER, BOTTOM);
+  text(`Ocean Cleanup: ${Math.floor(progress * 100)}%`, width / 2, y - 10);
 }
 
 function drawScoreboard() {
