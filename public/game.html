@@ -13,6 +13,7 @@ let players = {};
 let trash = [];
 let trashImages = [];
 let particles = [];
+let bubbles = [];
 let fish = [];
 let totalTrash = 50;
 let netImage;
@@ -21,7 +22,8 @@ let oceanSaved = false;
 let savedTimer = 0;
 let showScoreboard = false;
 let countdown = 30;
-let sunlightAlpha = 0;
+let splash = true;
+let shimmerX = 0;
 
 function preload() {
   netImage = loadImage('net.png');
@@ -45,8 +47,10 @@ function setup() {
       x: width / 2,
       y: height / 2,
       targetX: width / 2,
-      targetY: height / 2
+      targetY: height / 2,
+      alpha: 0
     };
+    splash = false;
   });
 
   socket.on('updateGame', ({ id, move }) => {
@@ -65,10 +69,11 @@ function setup() {
 
 function spawnTrash() {
   trash = [];
+  const marginBottom = 200;
   for (let i = 0; i < totalTrash; i++) {
     trash.push({
       x: random(width),
-      y: random(height),
+      y: random(height - marginBottom),
       size: random(40, 60),
       img: random(trashImages),
       floatOffset: random(1000)
@@ -92,59 +97,62 @@ function generateFish() {
 function draw() {
   let progress = 1 - (trash.length / totalTrash);
 
-  // Background
+  // --- BACKGROUND ---
   if (backgroundImg) {
     imageMode(CORNER);
     image(backgroundImg, 0, 0, width, height);
   } else {
-    let murkyColor = color(30, 60, 40);
-    let clearColor = color(0, 180, 255);
-    let bgColor = lerpColor(murkyColor, clearColor, progress);
-    background(bgColor);
+    background(30, 60, 40);
   }
 
-  // Fog layer
+  // --- FOG LAYER ---
   let fogAmount = map(trash.length, 0, totalTrash, 0, 120);
   noStroke();
   fill(0, fogAmount);
   rect(0, 0, width, height);
 
-  if (showScoreboard) {
-    drawScoreboard();
-    return;
-  }
-
+  // --- PARTICLES + BUBBLES ---
+  updateBubbles();
   updateParticles();
 
-  // Sunlight rays
-  if (progress > 0.7) {
-    sunlightAlpha = lerp(sunlightAlpha, 100, 0.01);
-    drawSunlightRays(sunlightAlpha);
-  }
-
-  imageMode(CENTER);
-  for (let t of trash) {
-    let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
-    image(t.img, t.x, t.y + floatY, t.size, t.size);
-  }
-
-  if (progress >= 1) {
-    for (let f of fish) {
-      fill(f.color);
-      noStroke();
-      ellipse(f.x, f.y, f.size * 1.2, f.size);
-      f.x += f.speed;
-      if (f.x > width + f.size) {
-        f.x = -f.size;
-        f.y = random(height);
-      }
+  // --- FISH LOOP ---
+  for (let f of fish) {
+    fill(f.color);
+    noStroke();
+    ellipse(f.x, f.y, f.size * 1.2, f.size);
+    f.x += f.speed;
+    if (f.x > width + f.size) {
+      f.x = -f.size;
+      f.y = random(height);
     }
   }
 
+  // --- TRASH DRAWING ---
+  imageMode(CENTER);
+  for (let t of trash) {
+    let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
+    let glowSize = t.size + 20;
+    fill(0, 255, 200, 60);
+    ellipse(t.x, t.y + floatY, glowSize);
+    image(t.img, t.x, t.y + floatY, t.size, t.size);
+  }
+
+  // --- PLAYER DRAWING ---
   for (let id in players) {
     let p = players[id];
     p.x = lerp(p.x, p.targetX, 0.1);
     p.y = lerp(p.y, p.targetY, 0.1);
+    if (p.alpha < 255) p.alpha += 5;
+
+    if (frameCount % 6 === 0) {
+      bubbles.push({
+        x: p.x + random(-10, 10),
+        y: p.y + 30,
+        size: random(10, 20),
+        life: 60,
+        color: [200, 255, 255]
+      });
+    }
 
     if (frameCount % 5 === 0) {
       particles.push({ x: p.x, y: p.y, life: 60, color: p.color });
@@ -152,8 +160,10 @@ function draw() {
 
     push();
     translate(p.x, p.y);
+    tint(255, p.alpha);
     image(netImage, 0, 0, 100, 100);
-    fill(255);
+    noTint();
+    fill(255, p.alpha);
     noStroke();
     textAlign(CENTER);
     textSize(24);
@@ -169,8 +179,13 @@ function draw() {
     }
   }
 
+  // --- PROGRESS BAR ---
   drawProgressBar(progress);
 
+  // --- SPLASH SCREEN ---
+  if (splash) drawSplashScreen();
+
+  // --- SCOREBOARD LOGIC ---
   if (!oceanSaved && trash.length === 0) {
     oceanSaved = true;
     savedTimer = frameCount;
@@ -179,6 +194,24 @@ function draw() {
   if (oceanSaved && frameCount > savedTimer + 60) {
     showScoreboard = true;
     savedTimer = frameCount;
+  }
+
+  // --- SCOREBOARD ---
+  if (showScoreboard) drawScoreboard();
+}
+
+function updateBubbles() {
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    let b = bubbles[i];
+    fill(b.color[0], b.color[1], b.color[2], map(b.life, 0, 60, 0, 180));
+    noStroke();
+    ellipse(b.x, b.y, b.size);
+    b.y -= 0.5;
+    b.size *= 0.98;
+    b.life -= 1;
+    if (b.life <= 0) {
+      bubbles.splice(i, 1);
+    }
   }
 }
 
@@ -201,27 +234,25 @@ function drawProgressBar(progress) {
   const x = width / 2 - barWidth / 2;
   const y = height - 100;
 
-  // Outer border glow
+  shimmerX += 10;
+  if (shimmerX > barWidth) shimmerX = -200;
+
   noFill();
   stroke(0, 255, 200, 100);
   strokeWeight(6);
   rect(x - 4, y - 4, barWidth + 8, barHeight + 8, 30);
 
-  // Background bar
   noStroke();
   fill(0, 50, 70, 180);
   rect(x, y, barWidth, barHeight, 20);
 
-  // Progress fill
   let fillColor = lerpColor(color(255, 50, 100), color(0, 255, 150), progress);
   fill(fillColor);
   rect(x, y, barWidth * progress, barHeight, 20);
 
-  // Shine effect
-  fill(255, 255, 255, 50);
-  rect(x, y, barWidth * progress, barHeight * 0.2, 20);
+  fill(255, 255, 255, 80);
+  rect(x + shimmerX, y, 100, barHeight, 20);
 
-  // Label
   fill(255);
   noStroke();
   textSize(32);
@@ -229,8 +260,20 @@ function drawProgressBar(progress) {
   text(`Ocean Cleanup: ${Math.floor(progress * 100)}%`, width / 2, y - 10);
 }
 
+function drawSplashScreen() {
+  fill(0, 180);
+  rect(0, 0, width, height);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(80);
+  text("🌊 OCEAN CLEANUP 🌊", width / 2, height / 2 - 100);
+  textSize(40);
+  text("Waiting for players to join...", width / 2, height / 2 + 20);
+}
+
 function drawScoreboard() {
-  background(0);
+  fill(0, 200);
+  rect(0, 0, width, height);
   fill(255);
   textAlign(CENTER, CENTER);
   textSize(80);
@@ -255,25 +298,13 @@ function drawScoreboard() {
       countdown = 30;
       for (let id in players) {
         players[id].score = 0;
+        players[id].alpha = 0;
       }
       spawnTrash();
       generateFish();
+      splash = true;
     }
   }
-}
-
-function drawSunlightRays(alpha) {
-  push();
-  blendMode(ADD);
-  noStroke();
-  fill(255, 255, 200, alpha);
-  for (let i = 0; i < 8; i++) {
-    let angle = i * TWO_PI / 8;
-    let x = width / 2 + cos(angle) * 800;
-    let y = height / 2 + sin(angle) * 800;
-    triangle(width / 2, 0, x, y, width / 2, height / 2);
-  }
-  pop();
 }
 </script>
 </body>
