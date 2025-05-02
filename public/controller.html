@@ -9,6 +9,7 @@
     html, body {
       margin: 0;
       padding: 0;
+      background: #000; /* fallback if image fails */
       background: url('controller-bg.png') center center no-repeat;
       background-size: cover;
       height: 100%;
@@ -63,14 +64,14 @@ let posX = 0.5, posY = 0.5;
 
 function startController() {
   const name = document.getElementById("playerName").value.trim();
-  if (!name || name.length < 1) return;
+  if (!name) return;
 
   document.getElementById("overlay").style.display = "none";
 
-  socket = io();
+  // Connect explicitly to the host where Socket.IO is running if necessary
+  socket = io({ transports: ['websocket'] });
   socket.emit('join', name);
 
-  // Prevent iOS from swiping to refresh or navigating
   document.body.addEventListener('touchmove', function(e) {
     e.preventDefault();
   }, { passive: false });
