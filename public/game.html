@@ -60,7 +60,9 @@ let countdown = 180;
 let splash = true;
 let shimmerX = 0;
 let bgMusic;
-let gameTimer = 300;
+let gameTimer = 120; // 2 minutes
+let gameOver = false;
+let gameOverTimer = 0;
 let gameStartFrame;
 let bgMusicLoaded = false;
 let grime = 1;
@@ -138,13 +140,10 @@ function draw() {
   drawingContext.clip();
 
   let progress = 1 - (trash.length / totalTrash);
-  // Smart dynamic trash respawn rate
   const playerCount = Object.keys(players).length;
-  // grime already declared later; removing this duplicate
-// const grime = trash.length / totalTrash;
   let grimeRate = constrain(trash.length / totalTrash, 0, 1);
   let rate = map(grimeRate, 0, 1, 180, 60) - playerCount * 10;
-  rate = constrain(rate, 30, 300); // between 0.5s and 5s
+  rate = constrain(rate, 30, 300);
 
   if ((frameCount - gameStartFrame) > 600 && frameCount % Math.floor(rate) === 0 && trash.length < totalTrash) {
     spawnTrash();
@@ -183,7 +182,6 @@ function draw() {
     }
   }
 
-  // Continuously spawn more fish if below target count
   while (fish.length < 20) {
     let angle = random(TWO_PI);
     let r = random(height / 2 - 100);
@@ -201,11 +199,12 @@ function draw() {
   imageMode(CENTER);
   for (let t of trash) {
     let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
-    let glowSize = t.size + 20;
-    fill(0, 255, 200, 60);
-    ellipse(t.x, t.y + floatY, glowSize);
-    fill(255, 255, 255, 60);
-    ellipse(t.x, t.y + floatY, glowSize + 10);
+
+    // Draw subtle edge glow
+    tint(0, 255, 200, 80);
+    image(t.img, t.x, t.y + floatY, t.size + 10, t.size + 10);
+
+    noTint();
     image(t.img, t.x, t.y + floatY, t.size, t.size);
   }
 
@@ -252,19 +251,17 @@ function draw() {
     }
   }
 
-  // drawProgressBar(progress); // Removed countdown arc
-
   fill(255);
   textAlign(CENTER, CENTER);
   textSize(100);
   text(`${timeLeft}`, width / 2, height - 260);
-  
-  // Show current leading player below timer
+
   let topPlayer = Object.values(players).sort((a, b) => b.score - a.score)[0];
   if (topPlayer) {
     textSize(40);
     text(`Leader: ${topPlayer.name}`, width / 2, height - 180);
   }
+
   push();
   translate(width / 2, 260);
   rotate(PI);
@@ -281,13 +278,45 @@ function draw() {
     savedTimer = frameCount;
   }
 
-  if (showScoreboard) drawScoreboard();
+  if (showScoreboard) {
+    drawScoreboard();
+    if (frameCount > savedTimer + 120) { // Hide scoreboard after 2 seconds
+      showScoreboard = false;
+    }
+  }
   drawingContext.restore();
   pop();
 
-  if (timeLeft === 0 && !showScoreboard) {
-    oceanSaved = true;
-    showScoreboard = true;
+  if (timeLeft === 0 && !gameOver) {
+    gameOver = true;
+    gameOverTimer = frameCount;
+  }
+
+  if (gameOver && frameCount - gameOverTimer < 3600) { // Show game over screen for 1 minute (3600 frames at 60 FPS)
+    push();
+    fill(0, 0, 0, 180);
+    rect(0, 0, width, height);
+    fill(255);
+    textSize(100);
+    textAlign(CENTER, CENTER);
+    text("GAME OVER", width / 2, height / 2);
+    textSize(40);
+    let secondsLeft = Math.ceil((3600 - (frameCount - gameOverTimer)) / 60);
+    text(`Next game starts in ${secondsLeft} seconds`, width / 2, height / 2 + 100);
+    pop();
+  } else if (gameOver && frameCount - gameOverTimer >= 180) {
+    // Reset game state
+    gameOver = false;
+    oceanSaved = false;
+    showScoreboard = false;
+    savedTimer = 0;
+    gameStartFrame = frameCount;
+    trash = [];
+    spawnTrash();
+    particles = [];
+    bubbles = [];
+    fish = [];
+    generateFish();
   }
 }
 
@@ -357,8 +386,6 @@ function updateParticles() {
     }
   }
 }
-
-// Removed drawProgressBar function
 </script>
 </body>
 </html>
