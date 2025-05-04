@@ -50,6 +50,7 @@ let trashImages = [];
 let particles = [];
 let bubbles = [];
 let fish = [];
+let fishImages = [];
 let totalTrash = 50;
 let netImage;
 let backgroundImg;
@@ -85,6 +86,20 @@ function preload() {
   for (let i = 1; i <= 10; i++) {
     trashImages.push(loadImage(`trash${i}.png`));
   }
+  // Load fish images
+  fishImages = [];
+  for (let i = 1; i <= 6; i++) {
+    let fishImg = loadImage(`fish${i}.png`, (img) => {
+      console.log(`Successfully loaded fish image ${i}:`, {
+        width: img.width,
+        height: img.height
+      });
+      fishImages[i-1] = img;
+      if (i === 6) {
+        generateFish();
+      }
+    });
+  }
   soundFormats('mp3');
   bgMusic = loadSound('background-music.mp3', () => {
     bgMusicLoaded = true;
@@ -96,12 +111,21 @@ function setup() {
   createCanvas(4096, 4096);
   socket = io();
   spawnTrash();
-  generateFish();
   noLoop();
 
+  // Wait for images to load before generating fish
+  setTimeout(() => {
+    if (fishImages.length === 6) {
+      generateFish();
+    }
+  }, 1000);
+
   socket.on('playerJoined', ({ id, name }) => {
+    // Generate a random color
+    const color = [random(255), random(255), random(255)];
+    
     players[id] = {
-      color: [random(255), random(255), random(255)],
+      color: color,
       name: name,
       score: 0,
       x: width / 2,
@@ -110,6 +134,14 @@ function setup() {
       targetY: height / 2,
       alpha: 0
     };
+    
+    // Make the player visible
+    players[id].alpha = 255;
+    
+    // Send the color back to the controller
+    socket.emit('playerColor', { color: color });
+    
+    console.log(`Player joined: ${name} with color: ${color}`);
     splash = false;
   });
 
@@ -117,6 +149,7 @@ function setup() {
     if (players[id]) {
       players[id].targetX = move.x * width;
       players[id].targetY = move.y * height;
+      console.log(`Player ${id} moved to: ${move.x}, ${move.y}`);
     }
   });
 
@@ -166,19 +199,84 @@ function draw() {
   updateParticles();
 
   for (let f of fish) {
-    fill(f.color);
-    noStroke();
-    ellipse(f.x, f.y, f.size * 1.2, f.size);
-    f.x += f.speed;
-    let centerX = width / 2;
-    let centerY = height / 2;
-    let radius = height / 2 - 100;
-    let distFromCenter = dist(f.x, f.y, centerX, centerY);
-    if (distFromCenter > radius) {
-      let angle = random(TWO_PI);
-      let r = random(radius);
-      f.x = centerX + cos(angle) * r;
-      f.y = centerY + sin(angle) * r;
+    // Use a random fish image
+    let fishImage = fishImages[f.imageIndex];
+    if (fishImage && fishImage.width > 0 && fishImage.height > 0) {
+      // Scale the image based on the fish's size
+      let scale = f.size / fishImage.width;
+      push();
+      translate(f.x, f.y);
+      rotate(f.rotation);
+      image(fishImage, 0, 0, fishImage.width * scale, fishImage.height * scale);
+      pop();
+    } else {
+      console.log('Invalid fish image:', f.imageIndex, fishImage);
+    }
+
+    // Update fish position
+    if (f.imageIndex === 0) { // Crab (index 0)
+      // Stay static on the ocean floor
+      let centerX = width / 2;
+      let centerY = height / 2;
+      let radius = height / 2 - 100;
+      
+      // Keep crab on the edge
+      let angle = atan2(f.y - centerY, f.x - centerX);
+      f.x = centerX + cos(angle) * radius;
+      f.y = centerY + sin(angle) * radius;
+      
+      // Keep rotation facing forward
+      f.rotation = angle + PI/2; // Face forward
+    } else if (f.imageIndex === 1) { // Eel (index 1)
+      // Create subtle wavy effect for eel
+      
+      // Add subtle wavy motion
+      let waveOffset = frameCount * 0.05; // Slower wave speed
+      f.y += sin(waveOffset) * 2; // Smaller up/down wave
+      f.x += cos(waveOffset) * 1.5; // Smaller side-to-side wave
+      
+      // Add subtle wavy rotation
+      f.rotation = f.rotation + sin(waveOffset) * 0.05;
+      
+      // Keep eel within bounds
+      let centerX = width / 2;
+      let centerY = height / 2;
+      let radius = height / 2 - 100;
+      let distFromCenter = dist(f.x, f.y, centerX, centerY);
+      if (distFromCenter > radius) {
+        let angle = random(TWO_PI);
+        let r = random(radius);
+        f.x = centerX + cos(angle) * r;
+        f.y = centerY + sin(angle) * r;
+        f.rotation = angle + random(-PI/4, PI/4);
+      }
+    } else if (f.imageIndex === 2 || f.imageIndex === 4) { // Fish 3 and 5 (index 2 and 4)
+      // Move horizontally from left to right with natural movement
+      f.x += f.speed;
+      f.y += random(-1, 1); // Small up/down movement
+      f.rotation = 0; // Face forward
+      
+      if (f.x > width) {
+        f.x = 0; // Reset to left side when off screen
+        f.y = random(height * 0.2, height * 0.8); // Random y position in middle of screen
+      }
+    } else {
+      // Normal fish movement
+      f.x += f.speed * cos(f.rotation);
+      f.y += f.speed * sin(f.rotation);
+      f.rotation += f.rotationSpeed;
+      
+      let centerX = width / 2;
+      let centerY = height / 2;
+      let radius = height / 2 - 100;
+      let distFromCenter = dist(f.x, f.y, centerX, centerY);
+      if (distFromCenter > radius) {
+        let angle = random(TWO_PI);
+        let r = random(radius);
+        f.x = centerX + cos(angle) * r;
+        f.y = centerY + sin(angle) * r;
+        f.rotation = angle + random(-PI/4, PI/4); // Set rotation to face direction of movement
+      }
     }
   }
 
@@ -192,7 +290,9 @@ function draw() {
       y: y,
       speed: random(0.5, 1.5),
       size: random(40, 80),
-      color: color(random(100, 255), random(100, 255), random(100, 255))
+      imageIndex: floor(random(fishImages.length)),
+      rotation: random(TWO_PI),
+      rotationSpeed: random(-0.02, 0.02)
     });
   }
 
@@ -230,15 +330,26 @@ function draw() {
       particles.push({ x: p.x, y: p.y, life: 60, color: p.color });
     }
 
+    // Draw player
     push();
     translate(p.x, p.y);
+    
+    // Draw solid colored circle around net
+    fill(p.color[0], p.color[1], p.color[2], 150); // Semi-transparent fill
+    noStroke();
+    ellipse(0, 0, 120, 120);
+    
+    // Draw net
     tint(255, p.alpha);
     image(netImage, 0, 0, 100, 100);
     noTint();
+    
+    // Draw name
     fill(255, p.alpha);
     noStroke();
     textAlign(CENTER);
-    textSize(24);
+    textSize(32);
+    textStyle(BOLD);
     text(p.name, 0, -70);
     pop();
 
@@ -251,22 +362,13 @@ function draw() {
     }
   }
 
-  fill(255);
-  textAlign(CENTER, CENTER);
-  textSize(100);
-  text(`${timeLeft}`, width / 2, height - 260);
-
   let topPlayer = Object.values(players).sort((a, b) => b.score - a.score)[0];
   if (topPlayer) {
+    fill(255);
+    textAlign(CENTER, CENTER);
     textSize(40);
-    text(`Leader: ${topPlayer.name}`, width / 2, height - 180);
+    text(`Leader: ${topPlayer.name}`, width / 2, height - 260);
   }
-
-  push();
-  translate(width / 2, 260);
-  rotate(PI);
-  text(`${timeLeft}`, 0, 0);
-  pop();
 
   if (!oceanSaved && trash.length === 0) {
     oceanSaved = true;
@@ -344,19 +446,63 @@ function generateFish() {
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = height / 2 - 100;
-  for (let i = 0; i < 20; i++) {
+  
+  // Add more crabs around the edge
+  for (let i = 0; i < 8; i++) { // 8 crabs
+    let angle = i * (TWO_PI / 8); // Evenly spaced around the circle
+    let x = centerX + cos(angle) * radius;
+    let y = centerY + sin(angle) * radius;
+    fish.push({
+      x: x,
+      y: y,
+      speed: 0.5, // Slower speed for crabs
+      size: random(30, 50), // Smaller size range for crabs
+      imageIndex: 0, // Crab image
+      rotation: angle + PI/2, // Face forward
+      rotationSpeed: 0 // No rotation
+    });
+  }
+  
+  // Add other fish with unique size ranges
+  for (let i = 0; i < 12; i++) { // Reduced number of other fish
     let angle = random(TWO_PI);
     let r = random(radius);
     let x = centerX + cos(angle) * r;
     let y = centerY + sin(angle) * r;
+    
+    // Determine size based on fish type
+    let sizeRange;
+    switch (floor(random(1, fishImages.length))) {
+      case 1: // Eel
+        sizeRange = random(60, 100); // Larger size for eel
+        break;
+      case 2: // Fish 3
+        sizeRange = random(40, 70); // Medium size
+        break;
+      case 3: // Fish 4
+        sizeRange = random(50, 80); // Medium-large size
+        break;
+      case 4: // Fish 5
+        sizeRange = random(30, 60); // Smaller size
+        break;
+      case 5: // Fish 6
+        sizeRange = random(45, 75); // Medium size
+        break;
+      default:
+        sizeRange = random(40, 80); // Default size range
+    }
+    
     fish.push({
       x: x,
       y: y,
       speed: random(0.5, 1.5),
-      size: random(40, 80),
-      color: color(random(100, 255), random(100, 255), random(100, 255))
+      size: sizeRange,
+      imageIndex: floor(random(1, fishImages.length)), // Skip crab image
+      rotation: angle, // Start facing their initial direction
+      rotationSpeed: random(-0.01, 0.01) // Slower rotation for more natural movement
     });
   }
+  console.log('Generated fish:', fish);
 }
 
 function updateBubbles() {
@@ -379,8 +525,10 @@ function updateParticles() {
     let p = particles[i];
     fill(p.color[0], p.color[1], p.color[2], map(p.life, 0, 60, 0, 255));
     noStroke();
-    ellipse(p.x, p.y, 10);
-    p.life -= 2;
+    ellipse(p.x, p.y, 2, 2);
+    p.x += random(-0.5, 0.5);
+    p.y -= 0.1;
+    p.life -= 1;
     if (p.life <= 0) {
       particles.splice(i, 1);
     }

@@ -8,6 +8,11 @@ const io = socketIO(server);
 
 app.use(express.static('public'));
 
+// Serve game.html at root
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/game.html');
+});
+
 let players = {};
 
 io.on('connection', (socket) => {

@@ -48,14 +48,27 @@
       cursor: pointer;
     }
   </style>
+  <style>
+    #colorIndicator {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 50%;
+      height: 25%;
+      background-color: #000;
+      z-index: 9999;
+      pointer-events: none;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-
-<div id="overlay">
-  <h2>Enter your name</h2>
-  <input type="text" id="playerName" maxlength="12" placeholder="Name">
-  <button onclick="startController()">Join</button>
-</div>
+  <div id="overlay">
+    <h1>Trash Game Controller</h1>
+    <input type="text" id="playerName" placeholder="Enter your name" />
+    <button onclick="startController()">Join Game</button>
+  </div>
+  <div id="colorIndicator"></div>
 
 <script>
 let socket;
@@ -68,9 +81,49 @@ function startController() {
 
   document.getElementById("overlay").style.display = "none";
 
-  // Connect explicitly to the host where Socket.IO is running if necessary
-  socket = io({ transports: ['websocket'] });
-  socket.emit('join', name);
+  // Connect to the server
+  socket = io();
+  
+  // Handle connection events
+  socket.on('connect', () => {
+    console.log('Connected to server');
+    socket.emit('join', name);
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    alert('Failed to connect to the game server. Please try again.');
+    document.getElementById('overlay').style.display = 'block';
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Disconnected from server');
+    alert('Disconnected from the game server. Please try reconnecting.');
+    document.getElementById('overlay').style.display = 'block';
+  });
+
+  // Handle receiving player color
+  socket.on('playerColor', (data) => {
+    console.log('Received player color:', data);
+    
+    const colorIndicator = document.getElementById('colorIndicator');
+    if (colorIndicator) {
+      colorIndicator.style.display = 'block';
+      colorIndicator.style.backgroundColor = `rgb(${data.color[0]}, ${data.color[1]}, ${data.color[2]})`;
+    }
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    alert('Failed to connect to the game server. Please try again.');
+    document.getElementById('overlay').style.display = 'block';
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Disconnected from server');
+    alert('Disconnected from the game server. Please try reconnecting.');
+    document.getElementById('overlay').style.display = 'block';
+  });
 
   document.body.addEventListener('touchmove', function(e) {
     e.preventDefault();
