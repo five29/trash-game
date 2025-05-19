@@ -122,13 +122,13 @@ collectSound = loadSound('collect.wav');
 
 function setup() {
   createCanvas(4096, 4096);
-  introVideo = createVideo('gameover.mp4');
+  introVideo = createVideo('https://www.dropbox.com/scl/fi/f7nijjyyliek9sb8t9keq/gameover.mp4?rlkey=c8nc3lxi2i19p94rk8eok6s3n&raw=1');
   introVideo.size(4096, 4096);
   introVideo.hide();
   socket = io();
   spawnTrash();
   noLoop();
-  gameOverVideo = createVideo('gameover.mp4');
+  gameOverVideo = createVideo('https://www.dropbox.com/scl/fi/f7nijjyyliek9sb8t9keq/gameover.mp4?rlkey=c8nc3lxi2i19p94rk8eok6s3n&raw=1');
   gameOverVideo.size(4096, 4096);
   gameOverVideo.hide(); // Hide it by default, we'll show it only at game over
 
