@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Controller</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000; /* fallback if image fails */
+      background: url('controller-bg.png') center center no-repeat;
+      background-size: cover;
+      height: 100%;
+      overflow: hidden;
+      font-family: sans-serif;
+      touch-action: none;
+    }
+    #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      z-index: 10;
+    }
+    #overlay input {
+      font-size: 1.5em;
+      padding: 0.5em;
+      margin-top: 1em;
+      border-radius: 10px;
+      border: none;
+    }
+    #overlay button {
+      font-size: 1.2em;
+      margin-top: 1em;
+      padding: 0.5em 1em;
+      border: none;
+      background: #0cf;
+      color: white;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <h1>Trash Game Controller</h1>
+    <input type="text" id="playerName" placeholder="Enter your name" />
+    <button onclick="startController()">Join Game</button>
+  </div>
+  <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.8); z-index:999; color:white; font-size:2em; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+    <div id="loadingText">Loading game…</div>
+    <div style="margin-top:24px; width:180px; background:#222; border-radius:12px;">
+      <div id="loadingBar" style="height:18px; width:0%; background:#0cf; border-radius:12px;"></div>
+    </div>
+  </div>
+
+<script>
+let socket;
+let startX = 0, startY = 0;
+let posX = 0.5, posY = 0.5;
+let loadingTimeout = null;
+
+// Make sure overlays are correct on page load
+window.onload = function() {
+  document.getElementById("loadingOverlay").style.display = "none";
+  document.getElementById("loadingBar").style.width = "0%";
+  document.getElementById("overlay").style.display = "flex";
+};
+
+function startController() {
+  const name = document.getElementById("playerName").value.trim();
+  if (!name) return;
+
+  document.getElementById("overlay").style.display = "none";
+  document.getElementById("loadingOverlay").style.display = "flex";
+  document.getElementById("loadingBar").style.width = "10%";
+  document.getElementById("loadingText").textContent = "Loading game…";
+
+  // Show "Still connecting" message after 8 seconds, just in case
+  loadingTimeout = setTimeout(() => {
+    document.getElementById("loadingText").textContent =
+      "Still connecting... Make sure you're on the same WiFi and the game is running.";
+  }, 8000);
+
+  // Connect to the server
+  socket = io();
+
+  socket.on('connect', () => {
+    document.getElementById("loadingBar").style.width = "30%";
+    console.log('Connected to server');
+    socket.emit('join', name);
+  });
+
+  socket.on('connect_error', (error) => {
+    clearTimeout(loadingTimeout);
+    console.error('Connection error:', error);
+    alert('Failed to connect to the game server. Please try again.');
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById("loadingOverlay").style.display = "none";
+  });
+
+  socket.on('disconnect', () => {
+    clearTimeout(loadingTimeout);
+    console.log('Disconnected from server');
+    alert('Disconnected from the game server. Please try reconnecting.');
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById("loadingOverlay").style.display = "none";
+  });
+
+  // Handle receiving player color (game is ready)
+  socket.on('playerColor', (data) => {
+    clearTimeout(loadingTimeout);
+    document.getElementById("loadingBar").style.width = "100%";
+    setTimeout(() => {
+      document.getElementById("loadingOverlay").style.display = "none";
+      // Optional: Uncomment for quick vibration feedback
+      // if (navigator.vibrate) navigator.vibrate(120);
+    }, 400);
+    // (No colorIndicator logic here)
+  });
+
+  document.body.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+  }, { passive: false });
+
+  document.body.addEventListener("touchstart", (e) => {
+    if (e.touches.length > 0) {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+    }
+  });
+
+  document.body.addEventListener("touchmove", (e) => {
+    if (e.touches.length > 0) {
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      startX = t.clientX;
+      startY = t.clientY;
+
+      posX += dx / window.innerWidth;
+      posY += dy / window.innerHeight;
+      posX = Math.max(0, Math.min(1, posX));
+      posY = Math.max(0, Math.min(1, posY));
+
+      socket.emit('playerMove', { x: posX, y: posY });
+    }
+  });
+}
+</script>
+
+</body>
+</html>
