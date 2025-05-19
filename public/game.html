@@ -122,13 +122,13 @@ collectSound = loadSound('collect.wav');
 
 function setup() {
   createCanvas(4096, 4096);
-  introVideo = createVideo('https://682b92eb3eba77e29e7870d9--harmonious-squirrel-dee747.netlify.app/gameover.mp4');
+  introVideo = createVideo('gameover.mp4');
   introVideo.size(4096, 4096);
   introVideo.hide();
   socket = io();
   spawnTrash();
   noLoop();
-  gameOverVideo = createVideo('https://682b92eb3eba77e29e7870d9--harmonious-squirrel-dee747.netlify.app/gameover.mp4');
+  gameOverVideo = createVideo('gameover.mp4');
   gameOverVideo.size(4096, 4096);
   gameOverVideo.hide(); // Hide it by default, we'll show it only at game over
 
