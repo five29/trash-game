@@ -25,6 +25,13 @@
     #startOverlay.hidden {
       display: none;
     }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
   </style>
 <script>
 function handleStartClick() {
@@ -51,7 +58,7 @@ let particles = [];
 let bubbles = [];
 let fish = [];
 let fishImages = [];
-let totalTrash = 50;
+let totalTrash = 300;
 let netImage;
 let backgroundImg;
 let oceanSaved = false;
@@ -61,11 +68,16 @@ let countdown = 180;
 let splash = true;
 let shimmerX = 0;
 let bgMusic;
+let collectSound;
 let gameTimer = 120; // 2 minutes
 let gameOver = false;
 let gameOverTimer = 0;
 let gameStartFrame;
+let gameOverVideo;
 let bgMusicLoaded = false;
+let showIntroVideo = false;
+let introVideoPlayed = false;
+let introVideo;
 let grime = 1;
 
 function handleStartClick() {
@@ -100,18 +112,25 @@ function preload() {
       }
     });
   }
-  soundFormats('mp3');
+  soundFormats('mp3', 'wav');
   bgMusic = loadSound('background-music.mp3', () => {
     bgMusicLoaded = true;
     document.getElementById('startOverlay').innerText = 'Click to Start';
   });
+collectSound = loadSound('collect.wav');
 }
 
 function setup() {
   createCanvas(4096, 4096);
+  introVideo = createVideo('gameover.mp4');
+  introVideo.size(4096, 4096);
+  introVideo.hide();
   socket = io();
   spawnTrash();
   noLoop();
+  gameOverVideo = createVideo('gameover.mp4');
+  gameOverVideo.size(4096, 4096);
+  gameOverVideo.hide(); // Hide it by default, we'll show it only at game over
 
   // Wait for images to load before generating fish
   setTimeout(() => {
@@ -134,14 +153,8 @@ function setup() {
       targetY: height / 2,
       alpha: 0
     };
-    
     // Make the player visible
     players[id].alpha = 255;
-    
-    // Send the color back to the controller
-    socket.emit('playerColor', { color: color });
-    
-    console.log(`Player joined: ${name} with color: ${color}`);
     splash = false;
   });
 
@@ -158,7 +171,15 @@ function setup() {
       players[id].score = score;
     }
   });
+
+  // === ADD THIS HANDLER TO REMOVE PLAYER ON DISCONNECT ===
+  socket.on('playerLeft', (id) => {
+    delete players[id];
+  });
+
+  // ...rest of your setup() function (if you have more below)
 }
+
 
 function draw() {
   if (!gameStartFrame) gameStartFrame = frameCount;
@@ -178,10 +199,7 @@ function draw() {
   let rate = map(grimeRate, 0, 1, 180, 60) - playerCount * 10;
   rate = constrain(rate, 30, 300);
 
-  if ((frameCount - gameStartFrame) > 600 && frameCount % Math.floor(rate) === 0 && trash.length < totalTrash) {
-    spawnTrash();
-  }
-
+  
   if (backgroundImg) {
     imageMode(CORNER);
     image(backgroundImg, 0, 0, width, height);
@@ -190,7 +208,7 @@ function draw() {
   }
 
   grime = lerp(grime, constrain(trash.length / totalTrash, 0, 1), 0.05);
-  let fogColor = lerpColor(color(20, 40, 40, 180), color(0, 180, 255, 0), 1 - grime);
+let fogColor = lerpColor(color(5, 35, 10, 255), color(0, 180, 255, 0), 1 - grime);
   noStroke();
   fill(fogColor);
   rect(0, 0, width, height);
@@ -300,9 +318,8 @@ function draw() {
   for (let t of trash) {
     let floatY = sin(frameCount * 0.05 + t.floatOffset) * 5;
 
-    // Draw subtle edge glow
-    tint(0, 255, 200, 80);
-    image(t.img, t.x, t.y + floatY, t.size + 10, t.size + 10);
+noTint();
+image(t.img, t.x, t.y + floatY, t.size, t.size);
 
     noTint();
     image(t.img, t.x, t.y + floatY, t.size, t.size);
@@ -354,12 +371,28 @@ function draw() {
     pop();
 
     for (let i = trash.length - 1; i >= 0; i--) {
-      let t = trash[i];
-      if (dist(p.x, p.y, t.x, t.y) < (50 + t.size / 2)) {
-        trash.splice(i, 1);
-        socket.emit('tryCollectTrash');
-      }
+  let t = trash[i];
+  if (dist(p.x, p.y, t.x, t.y) < (50 + t.size / 2)) {
+    // ---- PARTICLE BURST EFFECT ----
+    for (let j = 0; j < 20; j++) {
+      let angle = random(TWO_PI);
+      let speed = random(4, 10);
+      particles.push({
+        x: t.x,
+        y: t.y,
+        dx: cos(angle) * speed,
+        dy: sin(angle) * speed,
+        life: 30,
+        color: [random(180,255), random(180,255), 0]
+      });
     }
+    // ------------------------------
+    trash.splice(i, 1);
+if (collectSound && collectSound.isLoaded()) collectSound.play();
+    socket.emit('tryCollectTrash');
+  }
+}
+
   }
 
   let topPlayer = Object.values(players).sort((a, b) => b.score - a.score)[0];
@@ -369,6 +402,11 @@ function draw() {
     textSize(40);
     text(`Leader: ${topPlayer.name}`, width / 2, height - 260);
   }
+// Draw countdown timer
+fill(255);
+textAlign(CENTER, CENTER);
+textSize(70);
+text(`${timeLeft}`, width / 2, 160);
 
   if (!oceanSaved && trash.length === 0) {
     oceanSaved = true;
@@ -394,32 +432,51 @@ function draw() {
     gameOverTimer = frameCount;
   }
 
-  if (gameOver && frameCount - gameOverTimer < 3600) { // Show game over screen for 1 minute (3600 frames at 60 FPS)
-    push();
-    fill(0, 0, 0, 180);
-    rect(0, 0, width, height);
-    fill(255);
-    textSize(100);
-    textAlign(CENTER, CENTER);
-    text("GAME OVER", width / 2, height / 2);
-    textSize(40);
-    let secondsLeft = Math.ceil((3600 - (frameCount - gameOverTimer)) / 60);
-    text(`Next game starts in ${secondsLeft} seconds`, width / 2, height / 2 + 100);
-    pop();
-  } else if (gameOver && frameCount - gameOverTimer >= 180) {
-    // Reset game state
-    gameOver = false;
-    oceanSaved = false;
-    showScoreboard = false;
-    savedTimer = 0;
-    gameStartFrame = frameCount;
-    trash = [];
-    spawnTrash();
-    particles = [];
-    bubbles = [];
-    fish = [];
-    generateFish();
+if (gameOver && frameCount - gameOverTimer < 1800) {
+  // SHOW the game over video
+  if (gameOverVideo) {
+    gameOverVideo.show();
+    gameOverVideo.loop();
+    image(gameOverVideo, 0, 0, width, height);
   }
+  // Draw the overlay and text
+  push();
+  fill(0, 0, 0, 180);
+  rect(0, 0, width, height);
+  fill(255);
+  textSize(100);
+  textAlign(CENTER, CENTER);
+  text("GAME OVER", width / 2, height / 2);
+
+  // -- WINNER name just below GAME OVER --
+  let topPlayer = Object.values(players).sort((a, b) => b.score - a.score)[0];
+  if (topPlayer && topPlayer.name) {
+    textSize(55);
+    fill(255, 215, 0); // Gold color for winner
+    text(`Winner: ${topPlayer.name}`, width / 2, height / 2 + 70);
+  }
+
+  textSize(40);
+  fill(255);
+  let secondsLeft = Math.ceil((1800 - (frameCount - gameOverTimer)) / 60);
+  // Moved down by 60 more px to make room for winner
+  text(`Next game starts in ${secondsLeft}`, width / 2, height / 2 + 140);
+  pop();
+} else if (gameOver && frameCount - gameOverTimer >= 180) {
+  socket.emit('kickAll');
+  // Reset game state
+  gameOver = false;
+  oceanSaved = false;
+  showScoreboard = false;
+  savedTimer = 0;
+  gameStartFrame = frameCount;
+  trash = [];
+  spawnTrash();
+  particles = [];
+  bubbles = [];
+  fish = [];
+  generateFish();
+}
 }
 
 function spawnTrash() {
@@ -434,7 +491,7 @@ function spawnTrash() {
     trash.push({
       x: x,
       y: y,
-      size: random(40, 60),
+      size: random(80, 60),
       img: random(trashImages),
       floatOffset: random(1000)
     });
@@ -523,17 +580,42 @@ function updateBubbles() {
 function updateParticles() {
   for (let i = particles.length - 1; i >= 0; i--) {
     let p = particles[i];
-    fill(p.color[0], p.color[1], p.color[2], map(p.life, 0, 60, 0, 255));
+    fill(p.color[0], p.color[1], p.color[2], map(p.life, 0, 30, 0, 255));
     noStroke();
-    ellipse(p.x, p.y, 2, 2);
-    p.x += random(-0.5, 0.5);
-    p.y -= 0.1;
+    ellipse(p.x, p.y, 8, 8);
+    // Move sparkle if has dx/dy (sparkle burst)
+    if ('dx' in p) p.x += p.dx;
+    if ('dy' in p) p.y += p.dy;
+    if ('dx' in p) p.dx *= 0.85;
+    if ('dy' in p) p.dy *= 0.85;
     p.life -= 1;
     if (p.life <= 0) {
       particles.splice(i, 1);
     }
   }
 }
+</script>
+<div id="qr-container" style="position:fixed; left:30.2%; bottom:40px; transform:translate(-50%,0); background:rgba(255,255,255,0.9); padding:18px; border-radius:20px; z-index:9999; display:flex; flex-direction:column; align-items:center;">
+  <div style="color:#000; font-size: 20px; margin-bottom: 10px; font-family: sans-serif;">
+    <strong>Scan to Play!</strong>
+  </div>
+  <div id="qrcode"></div>
+  <div style="color:#444; font-size: 12px; margin-top: 5px; font-family: sans-serif;">
+    Or go to:<br>
+    <span id="qr-url"></span>
+  </div>
+</div>
+<!-- QRCode.js library from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+  // Make the link for the QR code (this uses your current address!)
+ var qrURL = "https://trash-game-1q5m.onrender.com/controller.html";
+  document.getElementById("qr-url").textContent = qrURL;
+  new QRCode(document.getElementById("qrcode"), {
+    text: qrURL,
+    width: 240,
+    height: 240
+  });
 </script>
 </body>
 </html>

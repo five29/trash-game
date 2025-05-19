@@ -48,19 +48,6 @@
       cursor: pointer;
     }
   </style>
-  <style>
-    #colorIndicator {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 50%;
-      height: 25%;
-      background-color: #000;
-      z-index: 9999;
-      pointer-events: none;
-      display: none;
-    }
-  </style>
 </head>
 <body>
   <div id="overlay">
@@ -68,61 +55,76 @@
     <input type="text" id="playerName" placeholder="Enter your name" />
     <button onclick="startController()">Join Game</button>
   </div>
-  <div id="colorIndicator"></div>
+  <div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.8); z-index:999; color:white; font-size:2em; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+    <div id="loadingText">Loading game…</div>
+    <div style="margin-top:24px; width:180px; background:#222; border-radius:12px;">
+      <div id="loadingBar" style="height:18px; width:0%; background:#0cf; border-radius:12px;"></div>
+    </div>
+  </div>
 
 <script>
 let socket;
 let startX = 0, startY = 0;
 let posX = 0.5, posY = 0.5;
+let loadingTimeout = null;
+
+// Make sure overlays are correct on page load
+window.onload = function() {
+  document.getElementById("loadingOverlay").style.display = "none";
+  document.getElementById("loadingBar").style.width = "0%";
+  document.getElementById("overlay").style.display = "flex";
+};
 
 function startController() {
   const name = document.getElementById("playerName").value.trim();
   if (!name) return;
 
   document.getElementById("overlay").style.display = "none";
+  document.getElementById("loadingOverlay").style.display = "flex";
+  document.getElementById("loadingBar").style.width = "10%";
+  document.getElementById("loadingText").textContent = "Loading game…";
+
+  // Show "Still connecting" message after 8 seconds, just in case
+  loadingTimeout = setTimeout(() => {
+    document.getElementById("loadingText").textContent =
+      "Still connecting... Make sure you're on the same WiFi and the game is running.";
+  }, 8000);
 
   // Connect to the server
   socket = io();
-  
-  // Handle connection events
+
   socket.on('connect', () => {
+    document.getElementById("loadingBar").style.width = "30%";
     console.log('Connected to server');
     socket.emit('join', name);
   });
 
   socket.on('connect_error', (error) => {
+    clearTimeout(loadingTimeout);
     console.error('Connection error:', error);
     alert('Failed to connect to the game server. Please try again.');
     document.getElementById('overlay').style.display = 'block';
+    document.getElementById("loadingOverlay").style.display = "none";
   });
 
   socket.on('disconnect', () => {
+    clearTimeout(loadingTimeout);
     console.log('Disconnected from server');
     alert('Disconnected from the game server. Please try reconnecting.');
     document.getElementById('overlay').style.display = 'block';
+    document.getElementById("loadingOverlay").style.display = "none";
   });
 
-  // Handle receiving player color
+  // Handle receiving player color (game is ready)
   socket.on('playerColor', (data) => {
-    console.log('Received player color:', data);
-    
-    const colorIndicator = document.getElementById('colorIndicator');
-    if (colorIndicator) {
-      colorIndicator.style.display = 'block';
-      colorIndicator.style.backgroundColor = `rgb(${data.color[0]}, ${data.color[1]}, ${data.color[2]})`;
-    }
-  });
-
-  socket.on('connect_error', (error) => {
-    console.error('Connection error:', error);
-    alert('Failed to connect to the game server. Please try again.');
-    document.getElementById('overlay').style.display = 'block';
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Disconnected from server');
-    alert('Disconnected from the game server. Please try reconnecting.');
-    document.getElementById('overlay').style.display = 'block';
+    clearTimeout(loadingTimeout);
+    document.getElementById("loadingBar").style.width = "100%";
+    setTimeout(() => {
+      document.getElementById("loadingOverlay").style.display = "none";
+      // Optional: Uncomment for quick vibration feedback
+      // if (navigator.vibrate) navigator.vibrate(120);
+    }, 400);
+    // (No colorIndicator logic here)
   });
 
   document.body.addEventListener('touchmove', function(e) {
