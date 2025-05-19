@@ -122,13 +122,13 @@ collectSound = loadSound('collect.wav');
 
 function setup() {
   createCanvas(4096, 4096);
-  introVideo = createVideo('https://github.com/five29/trash-game/releases/download/untagged-f3a6cc23ae5454ca36a0/gameover.mp4');
+  introVideo = createVideo('https://earnest-paprenjak-d5e128.netlify.app/gameover.mp4');
   introVideo.size(4096, 4096);
   introVideo.hide();
   socket = io();
   spawnTrash();
   noLoop();
-  gameOverVideo = createVideo('https://github.com/five29/trash-game/releases/download/untagged-f3a6cc23ae5454ca36a0/gameover.mp4');
+  gameOverVideo = createVideo('https://earnest-paprenjak-d5e128.netlify.app/gameover.mp4');
   gameOverVideo.size(4096, 4096);
   gameOverVideo.hide(); // Hide it by default, we'll show it only at game over
 
