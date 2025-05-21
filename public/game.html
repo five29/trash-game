@@ -445,9 +445,13 @@ text(`${timeLeft}`, 0, 0);
 pop();
 
   if (!oceanSaved && trash.length === 0) {
-    oceanSaved = true;
-    savedTimer = frameCount;
-  }
+  oceanSaved = true;
+  savedTimer = frameCount;
+
+  // Immediately trigger game over logic
+  gameOver = true;
+  gameOverTimer = frameCount;
+}
 
   if (oceanSaved && frameCount > savedTimer + 60) {
     showScoreboard = true;
@@ -563,14 +567,9 @@ function generateFish() {
   const centerY = height / 2;
   const radius = height / 2 - 100;
 
-  // QR code/no-go zone in the center
-  const qrZoneRadius = 240;
-  const qrZoneX = centerX;
-  const qrZoneY = centerY;
-
-  // Add crabs around the edge
-  for (let i = 0; i < 8; i++) {
-    let angle = i * (TWO_PI / 8);
+  // --- Double the crabs (16 instead of 8) ---
+  for (let i = 0; i < 16; i++) {
+    let angle = i * (TWO_PI / 16); // Evenly spaced around the circle
     let x = centerX + cos(angle) * radius;
     let y = centerY + sin(angle) * radius;
     fish.push({
@@ -578,11 +577,70 @@ function generateFish() {
       y: y,
       speed: 0.5,
       size: random(30, 50),
-      imageIndex: 0,
-      rotation: angle + PI/2,
+      imageIndex: 0, // Crab image
+      rotation: angle + PI / 2,
       rotationSpeed: 0
     });
   }
+
+  // --- Double the amount of fish3.png (index 2) ---
+  for (let i = 0; i < 24; i++) { // was 12, now 24
+    let angle = random(TWO_PI);
+    let r = random(radius);
+    let x = centerX + cos(angle) * r;
+    let y = centerY + sin(angle) * r;
+    fish.push({
+      x: x,
+      y: y,
+      speed: random(0.5, 1.5),
+      size: random(40, 70),
+      imageIndex: 2, // fish3.png
+      rotation: angle,
+      rotationSpeed: 0
+    });
+  }
+
+  // --- Double the amount of fish5.png (index 4) ---
+  for (let i = 0; i < 24; i++) { // was 12, now 24
+    let angle = random(TWO_PI);
+    let r = random(radius);
+    let x = centerX + cos(angle) * r;
+    let y = centerY + sin(angle) * r;
+    fish.push({
+      x: x,
+      y: y,
+      speed: random(0.5, 1.5),
+      size: random(40, 70),
+      imageIndex: 4, // fish5.png
+      rotation: angle,
+      rotationSpeed: 0
+    });
+  }
+
+  // --- Double the amount of other random fish (was 6, now 12) ---
+  for (let i = 0; i < 12; i++) {
+    let angle = random(TWO_PI);
+    let r = random(radius);
+    let x = centerX + cos(angle) * r;
+    let y = centerY + sin(angle) * r;
+
+    // Random image index (but skip 0, the crab, and avoid 2 and 4 which are already handled)
+    let possibleIndexes = [1, 3, 5];
+    let imageIndex = possibleIndexes[floor(random(possibleIndexes.length))];
+    let sizeRange = random(40, 80);
+
+    fish.push({
+      x: x,
+      y: y,
+      speed: random(0.5, 1.5),
+      size: sizeRange,
+      imageIndex: imageIndex,
+      rotation: angle,
+      rotationSpeed: random(-0.01, 0.01)
+    });
+  }
+
+  console.log('Generated fish:', fish);
 
   // Helper to spawn fish but SKIP the QR zone
   function pushFish(count, imageIndex, sizeMin, sizeMax) {
