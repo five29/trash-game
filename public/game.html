@@ -25,12 +25,19 @@
     #startOverlay.hidden {
       display: none;
     }
+video {
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+}
 
 html, body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  
 }
   </style>
 <script>
@@ -69,16 +76,23 @@ let splash = true;
 let shimmerX = 0;
 let bgMusic;
 let collectSound;
-let gameTimer = 120; // 2 minutes
+let gameTimer = 10; // 2 minutes
 let gameOver = false;
 let gameOverTimer = 0;
 let gameStartFrame;
 let gameOverVideo;
+let gameOverVideoStarted = false;
 let bgMusicLoaded = false;
 let showIntroVideo = false;
 let introVideoPlayed = false;
 let introVideo;
 let grime = 1;
+
+// Center "no-go" zone (for QR code)
+// Adjust radius to fit your QR image, e.g., 200–300px
+const qrZoneRadius = 240;
+const qrZoneX = 4096 / 2;
+const qrZoneY = 4096 / 2;
 
 function handleStartClick() {
   if (!bgMusicLoaded) return;
@@ -332,10 +346,19 @@ image(t.img, t.x, t.y + floatY, t.size, t.size);
     let radius = height / 2 - 150;
     let targetDist = dist(p.targetX, p.targetY, centerX, centerY);
     if (targetDist > radius) {
-      let angle = atan2(p.targetY - centerY, p.targetX - centerX);
-      p.targetX = centerX + cos(angle) * radius;
-      p.targetY = centerY + sin(angle) * radius;
-    }
+  let angle = atan2(p.targetY - centerY, p.targetX - centerX);
+  p.targetX = centerX + cos(angle) * radius;
+  p.targetY = centerY + sin(angle) * radius;
+}
+
+// ---- QR CODE "NO GO" ZONE CHECK ----
+let distToQR = dist(p.targetX, p.targetY, qrZoneX, qrZoneY);
+if (distToQR < qrZoneRadius + 60) { // 60 is half your net's size, adjust if needed
+  let angle = atan2(p.targetY - qrZoneY, p.targetX - qrZoneX);
+  p.targetX = qrZoneX + cos(angle) * (qrZoneRadius + 60);
+  p.targetY = qrZoneY + sin(angle) * (qrZoneRadius + 60);
+}
+
     p.x = lerp(p.x, p.targetX, 0.1);
     p.y = lerp(p.y, p.targetY, 0.1);
     if (p.alpha < 255) p.alpha += 5;
@@ -402,11 +425,24 @@ if (collectSound && collectSound.isLoaded()) collectSound.play();
     textSize(40);
     text(`Leader: ${topPlayer.name}`, width / 2, height - 260);
   }
-// Draw countdown timer
+// Draw countdown timer (flipped upside down)
+push();
+translate(width / 2, 160);
+rotate(PI); // 180 degrees
 fill(255);
 textAlign(CENTER, CENTER);
 textSize(70);
-text(`${timeLeft}`, width / 2, 160);
+text(`${timeLeft}`, 0, 0);
+pop();
+
+// Draw countdown timer at the BOTTOM (right-side up)
+push();
+translate(width / 2, height - 160);
+fill(255);
+textAlign(CENTER, CENTER);
+textSize(70);
+text(`${timeLeft}`, 0, 0);
+pop();
 
   if (!oceanSaved && trash.length === 0) {
     oceanSaved = true;
@@ -433,36 +469,47 @@ text(`${timeLeft}`, width / 2, 160);
   }
 
 if (gameOver && frameCount - gameOverTimer < 1800) {
-  // SHOW the game over video
+  // --- SHOW the game over video ---
   if (gameOverVideo) {
     gameOverVideo.show();
+    gameOverVideo.volume(0); // Mute
     gameOverVideo.loop();
     image(gameOverVideo, 0, 0, width, height);
   }
-  // Draw the overlay and text
+
+  // --- Draw the overlay and text at the bottom half ---
   push();
-  fill(0, 0, 0, 180);
+  fill(0, 0, 0, 60);
   rect(0, 0, width, height);
   fill(255);
+
+  let baseY = height * 0.75; // Start at 75% down the canvas
+
   textSize(100);
   textAlign(CENTER, CENTER);
-  text("GAME OVER", width / 2, height / 2);
+  text("GAME OVER", width / 2, baseY);
 
-  // -- WINNER name just below GAME OVER --
   let topPlayer = Object.values(players).sort((a, b) => b.score - a.score)[0];
   if (topPlayer && topPlayer.name) {
     textSize(55);
     fill(255, 215, 0); // Gold color for winner
-    text(`Winner: ${topPlayer.name}`, width / 2, height / 2 + 70);
+    text(`Winner: ${topPlayer.name}`, width / 2, baseY + 70);
   }
 
   textSize(40);
   fill(255);
   let secondsLeft = Math.ceil((1800 - (frameCount - gameOverTimer)) / 60);
-  // Moved down by 60 more px to make room for winner
-  text(`Next game starts in ${secondsLeft}`, width / 2, height / 2 + 140);
+  text(`Next game starts in ${secondsLeft}`, width / 2, baseY + 140);
   pop();
-} else if (gameOver && frameCount - gameOverTimer >= 180) {
+
+} else if (gameOver && frameCount - gameOverTimer >= 1800) {
+  // After Game Over is done, stop and hide the video!
+  if (gameOverVideo) {
+    gameOverVideo.stop();
+    gameOverVideo.hide();
+    gameOverVideo.time(0);
+  }
+  gameOverVideoStarted = false; // <-- reset flag!
   socket.emit('kickAll');
   // Reset game state
   gameOver = false;
@@ -477,90 +524,125 @@ if (gameOver && frameCount - gameOverTimer < 1800) {
   fish = [];
   generateFish();
 }
+
 }
 
 function spawnTrash() {
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = height / 2 - 100;
+  // These should match your QR zone constants:
+  const qrZoneRadius = 240;  // Same value as step 1!
+  const qrZoneX = centerX;
+  const qrZoneY = centerY;
+
+  // This loop keeps trying until all trash is spawned (outside QR zone)
   while (trash.length < totalTrash) {
     let angle = random(TWO_PI);
     let r = random(radius);
     let x = centerX + cos(angle) * r;
     let y = centerY + sin(angle) * r;
-    trash.push({
-      x: x,
-      y: y,
-      size: random(80, 60),
-      img: random(trashImages),
-      floatOffset: random(1000)
-    });
+    let distToQR = dist(x, y, qrZoneX, qrZoneY);
+    if (distToQR > qrZoneRadius + 50) { // "50" is a little safety margin
+      trash.push({
+        x: x,
+        y: y,
+        size: random(80, 60),
+        img: random(trashImages),
+        floatOffset: random(1000)
+      });
+    }
+    // If too close to QR, it just tries again until enough trash is made
   }
 }
+
 
 function generateFish() {
   fish = [];
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = height / 2 - 100;
-  
-  // Add more crabs around the edge
-  for (let i = 0; i < 8; i++) { // 8 crabs
-    let angle = i * (TWO_PI / 8); // Evenly spaced around the circle
+
+  // QR code/no-go zone in the center
+  const qrZoneRadius = 240;
+  const qrZoneX = centerX;
+  const qrZoneY = centerY;
+
+  // Add crabs around the edge
+  for (let i = 0; i < 8; i++) {
+    let angle = i * (TWO_PI / 8);
     let x = centerX + cos(angle) * radius;
     let y = centerY + sin(angle) * radius;
     fish.push({
       x: x,
       y: y,
-      speed: 0.5, // Slower speed for crabs
-      size: random(30, 50), // Smaller size range for crabs
-      imageIndex: 0, // Crab image
-      rotation: angle + PI/2, // Face forward
-      rotationSpeed: 0 // No rotation
+      speed: 0.5,
+      size: random(30, 50),
+      imageIndex: 0,
+      rotation: angle + PI/2,
+      rotationSpeed: 0
     });
   }
-  
-  // Add other fish with unique size ranges
-  for (let i = 0; i < 12; i++) { // Reduced number of other fish
+
+  // Helper to spawn fish but SKIP the QR zone
+  function pushFish(count, imageIndex, sizeMin, sizeMax) {
+    let attempts = 0;
+    let added = 0;
+    while (added < count && attempts < count * 8) {
+      let angle = random(TWO_PI);
+      let r = random(radius);
+      let x = centerX + cos(angle) * r;
+      let y = centerY + sin(angle) * r;
+      if (dist(x, y, qrZoneX, qrZoneY) > qrZoneRadius + 60) {
+        fish.push({
+          x: x,
+          y: y,
+          speed: random(0.5, 1.5),
+          size: random(sizeMin, sizeMax),
+          imageIndex: imageIndex,
+          rotation: angle,
+          rotationSpeed: 0
+        });
+        added++;
+      }
+      attempts++;
+    }
+  }
+
+  // Add LOTS of fish3.png (index 2)
+  pushFish(18, 2, 40, 70);
+
+  // Add LOTS of fish5.png (index 4)
+  pushFish(18, 4, 40, 70);
+
+  // Add a few other random fish for variety (skip crab)
+  let otherFishCount = 6;
+  let attempts = 0, added = 0;
+  while (added < otherFishCount && attempts < otherFishCount * 10) {
     let angle = random(TWO_PI);
     let r = random(radius);
     let x = centerX + cos(angle) * r;
     let y = centerY + sin(angle) * r;
-    
-    // Determine size based on fish type
-    let sizeRange;
-    switch (floor(random(1, fishImages.length))) {
-      case 1: // Eel
-        sizeRange = random(60, 100); // Larger size for eel
-        break;
-      case 2: // Fish 3
-        sizeRange = random(40, 70); // Medium size
-        break;
-      case 3: // Fish 4
-        sizeRange = random(50, 80); // Medium-large size
-        break;
-      case 4: // Fish 5
-        sizeRange = random(30, 60); // Smaller size
-        break;
-      case 5: // Fish 6
-        sizeRange = random(45, 75); // Medium size
-        break;
-      default:
-        sizeRange = random(40, 80); // Default size range
+    if (dist(x, y, qrZoneX, qrZoneY) > qrZoneRadius + 60) {
+      let imageIndex = floor(random(1, fishImages.length));
+      let sizeRange = random(40, 80);
+      fish.push({
+        x: x,
+        y: y,
+        speed: random(0.5, 1.5),
+        size: sizeRange,
+        imageIndex: imageIndex,
+        rotation: angle,
+        rotationSpeed: random(-0.01, 0.01)
+      });
+      added++;
     }
-    
-    fish.push({
-      x: x,
-      y: y,
-      speed: random(0.5, 1.5),
-      size: sizeRange,
-      imageIndex: floor(random(1, fishImages.length)), // Skip crab image
-      rotation: angle, // Start facing their initial direction
-      rotationSpeed: random(-0.01, 0.01) // Slower rotation for more natural movement
-    });
+    attempts++;
   }
+
   console.log('Generated fish:', fish);
 }
+
 
 function updateBubbles() {
   for (let i = bubbles.length - 1; i >= 0; i--) {
@@ -595,27 +677,19 @@ function updateParticles() {
   }
 }
 </script>
-<div id="qr-container" style="position:fixed; left:30.2%; bottom:40px; transform:translate(-50%,0); background:rgba(255,255,255,0.9); padding:18px; border-radius:20px; z-index:9999; display:flex; flex-direction:column; align-items:center;">
-  <div style="color:#000; font-size: 20px; margin-bottom: 10px; font-family: sans-serif;">
-    <strong>Scan to Play!</strong>
-  </div>
-  <div id="qrcode"></div>
-  <div style="color:#444; font-size: 12px; margin-top: 5px; font-family: sans-serif;">
-    Or go to:<br>
-    <span id="qr-url"></span>
-  </div>
-</div>
-<!-- QRCode.js library from CDN -->
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<script>
-  // Make the link for the QR code (this uses your current address!)
- var qrURL = "https://trash-game-1q5m.onrender.com/controller.html";
-  document.getElementById("qr-url").textContent = qrURL;
-  new QRCode(document.getElementById("qrcode"), {
-    text: qrURL,
-    width: 240,
-    height: 240
-  });
-</script>
+
+<img 
+  id="game-overlay-img"
+  src="overlay.png"
+  style="
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 4096px;
+    height: 4096px;
+    pointer-events: none;
+    z-index: 50000;
+    user-select: none;"
+  alt="QR Overlay" />
 </body>
 </html>
