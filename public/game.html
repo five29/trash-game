@@ -76,7 +76,7 @@ let splash = true;
 let shimmerX = 0;
 let bgMusic;
 let collectSound;
-let gameTimer = 120; // 2 minutes
+let gameTimer = 240; // 2 minutes
 let gameOver = false;
 let gameOverTimer = 0;
 let gameStartFrame;
@@ -131,8 +131,11 @@ function preload() {
     bgMusicLoaded = true;
     document.getElementById('startOverlay').innerText = 'Click to Start';
   });
-collectSound = loadSound('collect.wav');
+collectSound = loadSound('collect.wav', () => {
+  collectSound.setVolume(0.09); // Set between 0.0 and 1.0 (try 0.25 or 0.15 for quiet)
+});
 }
+
 
 function setup() {
   createCanvas(4096, 4096);
